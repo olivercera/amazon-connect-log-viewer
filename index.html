@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon Connect Log Viewer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    :root {
+      --error-bg: #fff0f0;
+      --error-border: #e74c3c;
+      --lambda-bg: #f0f7ff;
+      --lambda-border: #3498db;
+      --highlight-bg: #fffde7;
+    }
+
+    body { padding: 0.75rem 1rem; }
+    header h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+
+    #top-bar {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+    }
+    #drop-zone {
+      border: 2px dashed var(--pico-muted-border-color);
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    #drop-zone.dragover {
+      border-color: var(--pico-primary);
+      background: var(--pico-primary-focus);
+    }
+    #drop-zone p { margin: 0; font-size: 0.85rem; }
+
+    #upload-info {
+      display: none;
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+    #upload-info .contact-id {
+      font-family: monospace;
+      font-weight: bold;
+    }
+
+    #filters {
+      display: none;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #filters select {
+      max-width: 200px;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.85rem;
+      margin: 0;
+    }
+    #filters label { display: none; }
+    #search-input {
+      padding: 0.3rem 0.5rem;
+      font-size: 0.85rem;
+      margin: 0;
+      max-width: 220px;
+    }
+
+    #quick-filters {
+      display: flex;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #quick-filters button {
+      padding: 0.25rem 0.75rem;
+      font-size: 0.8rem;
+      margin: 0;
+      width: auto;
+    }
+    #quick-filters button.active {
+      background: var(--pico-primary);
+      color: var(--pico-primary-inverse);
+    }
+    #quick-filters button:not(.active) {
+      background: var(--pico-secondary-background);
+      color: var(--pico-secondary);
+      border-color: var(--pico-secondary-border);
+    }
+
+    #row-count {
+      display: none;
+      font-size: 0.8rem;
+      color: var(--pico-muted-color);
+      white-space: nowrap;
+      margin-left: auto;
+    }
+
+    #results-table-wrapper {
+      display: none;
+      overflow-x: auto;
+    }
+    #results-table {
+      font-size: 0.85rem;
+    }
+    #results-table thead th {
+      cursor: default;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      background: var(--pico-card-background-color);
+    }
+    #results-table tbody tr {
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    #results-table tbody tr:hover {
+      background: var(--highlight-bg);
+    }
+    #results-table tbody tr.selected {
+      background: var(--pico-primary-focus);
+    }
+    #results-table tbody tr.error-row {
+      background: var(--error-bg);
+    }
+    #results-table tbody tr.error-row:hover {
+      background: #ffe0e0;
+    }
+    #results-table tbody tr.lambda-row {
+      border-left: 3px solid var(--lambda-border);
+    }
+    .error-badge {
+      display: inline-block;
+      background: var(--error-border);
+      color: white;
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      margin-left: 0.25rem;
+    }
+    .lambda-badge {
+      display: inline-block;
+      background: var(--lambda-border);
+      color: white;
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      margin-left: 0.25rem;
+    }
+    td.block-type-cell {
+      white-space: nowrap;
+    }
+    .check-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      margin-left: 0.25rem;
+      font-weight: bold;
+    }
+    .check-badge.check-true {
+      background: #22c55e;
+      color: white;
+    }
+    .check-badge.check-false {
+      background: #f59e0b;
+      color: white;
+    }
+    .group-badge {
+      display: inline-block;
+      background: #8b5cf6;
+      color: white;
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      margin-left: 0.25rem;
+    }
+    #results-table tbody tr.group-row {
+      border-left: 3px solid #8b5cf6;
+    }
+    .group-attrs-table {
+      font-size: 0.8rem;
+      width: 100%;
+      margin: 0;
+    }
+    .group-attrs-table th {
+      text-align: left;
+      font-size: 0.75rem;
+      color: var(--pico-muted-color);
+      padding: 0.2rem 0.5rem;
+    }
+    .group-attrs-table td {
+      padding: 0.2rem 0.5rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      word-break: break-all;
+    }
+
+    .detail-row td {
+      padding: 0 !important;
+      border: none !important;
+    }
+    .detail-row .detail-inner {
+      padding: 0.75rem 1rem;
+      background: var(--pico-card-background-color);
+      border-left: 3px solid var(--pico-primary);
+      margin: 0;
+    }
+    .detail-row .detail-inner.has-error {
+      border-left-color: var(--error-border);
+    }
+    .detail-sections {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    .detail-col {
+      min-width: 0;
+    }
+    @media (max-width: 768px) {
+      .detail-sections { grid-template-columns: 1fr; }
+    }
+    .detail-section {
+      margin-bottom: 0.5rem;
+    }
+    .detail-section h4 {
+      margin-bottom: 0.25rem;
+      font-size: 0.85rem;
+      color: var(--pico-muted-color);
+    }
+    .detail-section pre {
+      background: var(--pico-code-background-color);
+      padding: 0.75rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 300px;
+      overflow-y: auto;
+      margin: 0;
+    }
+    .kv-table {
+      font-size: 0.8rem;
+      width: 100%;
+      margin: 0;
+    }
+    .kv-table td:first-child {
+      font-weight: bold;
+      white-space: nowrap;
+      width: 1%;
+      padding-right: 1rem;
+      color: var(--pico-muted-color);
+    }
+    .kv-table td:last-child {
+      word-break: break-all;
+      font-family: monospace;
+    }
+    details.raw-row {
+      margin-top: 0.5rem;
+      grid-column: 1 / -1;
+    }
+    details.raw-row summary {
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: var(--pico-muted-color);
+    }
+
+    /* ─── Call Flow Modal ─────────────────────────────── */
+    #flow-btn {
+      display: none;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.85rem;
+      margin: 0;
+      width: auto;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    #flow-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 200;
+      justify-content: center;
+      align-items: center;
+    }
+    #flow-overlay.open { display: flex; }
+    #flow-modal {
+      background: var(--pico-card-background-color);
+      border-radius: 10px;
+      padding: 1.5rem 2rem;
+      width: 92vw;
+      max-height: 88vh;
+      overflow: auto;
+      position: relative;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    }
+    #flow-modal .close-btn {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.75rem;
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0;
+      margin: 0;
+      width: auto;
+      line-height: 1;
+    }
+    #flow-modal h3 {
+      margin-top: 0;
+      margin-bottom: 0.5rem;
+      font-size: 1.1rem;
+    }
+    #flow-canvas {
+      width: 100%;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="top-bar">
+      <div id="drop-zone">
+        <p><strong>Drop CSV</strong> or click</p>
+        <input type="file" id="file-input" accept=".csv" hidden>
+      </div>
+      <div id="upload-info"></div>
+      <button id="flow-btn" title="View call flow path">Call Flow</button>
+    </div>
+
+    <div id="flow-overlay">
+      <div id="flow-modal">
+        <button class="close-btn" title="Close">&times;</button>
+        <h3>Call Flow Path</h3>
+        <svg id="flow-canvas"></svg>
+      </div>
+    </div>
+
+    <div id="filters">
+      <select id="flow-select" title="Flow Name"></select>
+      <select id="block-select" title="Block Type"></select>
+      <div id="quick-filters"></div>
+      <input type="search" id="search-input" placeholder="Search all fields..." title="Free text search">
+      <button id="expand-all-btn" style="display:none;padding:0.3rem 0.75rem;font-size:0.8rem;margin:0;width:auto;white-space:nowrap" title="Expand or collapse all rows">Expand All</button>
+      <span id="row-count"></span>
+    </div>
+
+    <div id="results-table-wrapper">
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Flow Name</th>
+            <th>Block Type</th>
+            <th>Lambda</th>
+            <th>Identifier</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    // ─── CONFIGURATION ──────────────────────────────────────────────
+    const QUICK_FILTERS = ['InvokeExternalResource', 'PlayPrompt', 'SetAttributes', 'CheckAttribute', 'InvokeFlowModule'];
+    const MAX_RENDER_ROWS = 500;
+    // ─────────────────────────────────────────────────────────────────
+
+    // ─── STATE ───────────────────────────────────────────────────────
+    let rawData = [];
+    let activeFlow = 'ALL';
+    let activeBlock = 'ALL';
+    // ─────────────────────────────────────────────────────────────────
+
+    // ─── DOM REFS ────────────────────────────────────────────────────
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const uploadInfo = document.getElementById('upload-info');
+    const filtersEl = document.getElementById('filters');
+    const flowSelect = document.getElementById('flow-select');
+    const blockSelect = document.getElementById('block-select');
+    const quickFiltersEl = document.getElementById('quick-filters');
+    const rowCount = document.getElementById('row-count');
+    const tableWrapper = document.getElementById('results-table-wrapper');
+    const tbody = document.getElementById('results-body');
+    const colCount = 6;
+    const searchInput = document.getElementById('search-input');
+    const expandAllBtn = document.getElementById('expand-all-btn');
+    let activeSearch = '';
+    let allExpanded = false;
+    // ─────────────────────────────────────────────────────────────────
+
+    // ─── FILE UPLOAD ─────────────────────────────────────────────────
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.csv')) handleFile(file);
+    });
+    fileInput.addEventListener('change', e => {
+      if (e.target.files[0]) handleFile(e.target.files[0]);
+    });
+
+    function handleFile(file) {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete(results) {
+          const parsed = results.data
+            .map(row => {
+              try {
+                const msg = JSON.parse(row.message || row.Message || '{}');
+                return { _raw: msg, ...msg };
+              } catch { return null; }
+            })
+            .filter(Boolean);
+
+          if (parsed.length === 0) {
+            uploadInfo.innerHTML = '<strong>Error:</strong> No valid rows found. Check that the CSV has <code>timestamp</code> and <code>message</code> columns.';
+            uploadInfo.style.display = 'block';
+            return;
+          }
+
+          // Sort by Timestamp ascending
+          parsed.sort((a, b) => (a.Timestamp || '').localeCompare(b.Timestamp || ''));
+
+          rawData = parsed;
+          const contactId = rawData[0].ContactId || 'Unknown';
+          uploadInfo.innerHTML =
+            `<strong>Loaded:</strong> ${file.name} &mdash; ${rawData.length} rows<br>` +
+            `<strong>ContactId:</strong> <span class="contact-id">${contactId}</span>`;
+          uploadInfo.style.display = 'block';
+
+          populateFilters();
+          applyFilters();
+          filtersEl.style.display = 'flex';
+          rowCount.style.display = 'inline';
+          tableWrapper.style.display = 'block';
+          document.getElementById('flow-btn').style.display = 'inline-block';
+          expandAllBtn.style.display = 'inline-block';
+          allExpanded = false;
+          expandAllBtn.textContent = 'Expand All';
+        },
+        error(err) {
+          uploadInfo.innerHTML = `<strong>Parse error:</strong> ${err.message}`;
+          uploadInfo.style.display = 'block';
+        }
+      });
+    }
+
+    // ─── FILTERS ─────────────────────────────────────────────────────
+    function populateFilters() {
+      const flows = [...new Set(rawData.map(r => r.ContactFlowName).filter(Boolean))].sort();
+      const blocks = [...new Set(rawData.map(r => r.ContactFlowModuleType).filter(Boolean))].sort();
+
+      flowSelect.innerHTML = '<option value="ALL">All Flows</option>' +
+        flows.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+
+      blockSelect.innerHTML = '<option value="ALL">All Types</option>' +
+        blocks.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+
+      // Quick filter buttons
+      quickFiltersEl.innerHTML = '';
+      const allBtn = document.createElement('button');
+      allBtn.textContent = 'All';
+      allBtn.classList.add('active');
+      allBtn.addEventListener('click', () => {
+        activeBlock = 'ALL';
+        blockSelect.value = 'ALL';
+        updateQuickFilterActive();
+        applyFilters();
+      });
+      quickFiltersEl.appendChild(allBtn);
+
+      for (const qf of QUICK_FILTERS) {
+        if (!blocks.includes(qf)) continue;
+        const btn = document.createElement('button');
+        btn.textContent = shortLabel(qf);
+        btn.dataset.value = qf;
+        btn.addEventListener('click', () => {
+          activeBlock = qf;
+          blockSelect.value = qf;
+          updateQuickFilterActive();
+          applyFilters();
+        });
+        quickFiltersEl.appendChild(btn);
+      }
+    }
+
+    function shortLabel(type) {
+      const map = {
+        'InvokeExternalResource': 'Lambda',
+        'PlayPrompt': 'Prompt',
+        'SetAttributes': 'SetAttr',
+        'CheckAttribute': 'CheckAttr',
+        'InvokeFlowModule': 'FlowModule'
+      };
+      return map[type] || type;
+    }
+
+    function updateQuickFilterActive() {
+      quickFiltersEl.querySelectorAll('button').forEach(btn => {
+        const val = btn.dataset.value || 'ALL';
+        btn.classList.toggle('active', val === activeBlock);
+      });
+    }
+
+    flowSelect.addEventListener('change', () => { activeFlow = flowSelect.value; applyFilters(); });
+    blockSelect.addEventListener('change', () => {
+      activeBlock = blockSelect.value;
+      updateQuickFilterActive();
+      applyFilters();
+    });
+    searchInput.addEventListener('input', () => { activeSearch = searchInput.value.toLowerCase(); applyFilters(); });
+    expandAllBtn.addEventListener('click', () => {
+      allExpanded = !allExpanded;
+      expandAllBtn.textContent = allExpanded ? 'Collapse All' : 'Expand All';
+      if (allExpanded) {
+        tbody.querySelectorAll('tr:not(.detail-row)').forEach(tr => {
+          if (!tr.nextElementSibling || !tr.nextElementSibling.classList.contains('detail-row')) {
+            tr.click();
+          }
+        });
+      } else {
+        tbody.querySelectorAll('tr.detail-row').forEach(dr => {
+          dr.previousElementSibling.classList.remove('selected');
+          dr.remove();
+        });
+      }
+    });
+
+    // ─── APPLY FILTERS & RENDER ──────────────────────────────────────
+    function applyFilters() {
+      let data = rawData;
+      if (activeFlow !== 'ALL') data = data.filter(r => r.ContactFlowName === activeFlow);
+      if (activeBlock !== 'ALL') data = data.filter(r => r.ContactFlowModuleType === activeBlock);
+      if (activeSearch) {
+        data = data.filter(r => {
+          const haystack = JSON.stringify(r._raw).toLowerCase();
+          return haystack.includes(activeSearch);
+        });
+      }
+
+      const total = rawData.length;
+      const shown = Math.min(data.length, MAX_RENDER_ROWS);
+      rowCount.textContent = `${shown} of ${total}` +
+        (data.length > MAX_RENDER_ROWS ? ` (capped ${MAX_RENDER_ROWS})` : '');
+
+      renderTable(groupRows(data.slice(0, MAX_RENDER_ROWS)));
+    }
+
+    function groupRows(data) {
+      const grouped = [];
+      let i = 0;
+      while (i < data.length) {
+        const row = data[i];
+        if (row.ContactFlowModuleType === 'SetAttributes') {
+          // Collect consecutive SetAttributes with the same flow + identifier
+          const group = [row];
+          while (i + 1 < data.length
+            && data[i + 1].ContactFlowModuleType === 'SetAttributes'
+            && data[i + 1].ContactFlowName === row.ContactFlowName
+            && data[i + 1].Identifier === row.Identifier) {
+            i++;
+            group.push(data[i]);
+          }
+          if (group.length > 1) {
+            grouped.push({ _isGroup: true, rows: group, ContactFlowName: row.ContactFlowName, Identifier: row.Identifier, ContactFlowModuleType: 'SetAttributes', Timestamp: row.Timestamp, ContactFlowId: row.ContactFlowId });
+          } else {
+            grouped.push(row);
+          }
+        } else {
+          grouped.push(row);
+        }
+        i++;
+      }
+      return grouped;
+    }
+
+    function renderTable(data) {
+      tbody.innerHTML = '';
+      data.forEach((row, i) => {
+        const tr = document.createElement('tr');
+        const isGroup = row._isGroup;
+        const isError = !isGroup && hasError(row);
+        const isLambda = !isGroup && row.ContactFlowModuleType === 'InvokeExternalResource';
+
+        if (isError) tr.classList.add('error-row');
+        if (isLambda) tr.classList.add('lambda-row');
+        if (isGroup) tr.classList.add('group-row');
+
+        const blockTypeDisplay = esc(row.ContactFlowModuleType || '');
+        const isCheck = !isGroup && row.ContactFlowModuleType === 'CheckAttribute';
+        let badges = '';
+        if (isLambda) badges += ' <span class="lambda-badge">Lambda</span>';
+        if (isError) badges += ' <span class="error-badge">Error</span>';
+        if (isGroup) badges += ` <span class="group-badge">${row.rows.length}x</span>`;
+        if (isCheck && row.Results != null) badges += ` <span class="check-badge check-${row.Results}">${esc(row.Results)}</span>`;
+
+        const lambdaName = isLambda ? extractLambdaName(row) : '';
+        const identifier = isGroup
+          ? friendlyIdentifier(row.Identifier || '')
+          : friendlyIdentifier(row.Identifier || '');
+
+        tr.innerHTML =
+          `<td>${i + 1}</td>` +
+          `<td>${esc(row.ContactFlowName || '')}</td>` +
+          `<td class="block-type-cell">${blockTypeDisplay}${badges}</td>` +
+          `<td>${esc(lambdaName)}</td>` +
+          `<td>${esc(identifier)}</td>` +
+          `<td>${formatTime(row.Timestamp)}</td>`;
+
+        tr.addEventListener('click', () => toggleDetail(row, tr));
+        tbody.appendChild(tr);
+      });
+    }
+
+    function hasError(row) {
+      if (row.ExternalResults) {
+        const er = row.ExternalResults;
+        if (er.errors && er.errors !== '') return true;
+        if (er.error) return true;
+      }
+      return false;
+    }
+
+    function extractLambdaName(row) {
+      try {
+        const arn = row.Parameters && row.Parameters.FunctionArn;
+        if (!arn) return '';
+        // ARN format: arn:aws:lambda:region:account:function:NAME:qualifier
+        const parts = arn.split(':');
+        const fnIdx = parts.indexOf('function');
+        return fnIdx !== -1 && parts[fnIdx + 1] ? parts[fnIdx + 1] : arn;
+      } catch { return ''; }
+    }
+
+    function friendlyIdentifier(id) {
+      // If it's a UUID, show a truncated version
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(id)) return id.substring(0, 8) + '...';
+      return id;
+    }
+
+    function formatTime(ts) {
+      if (!ts) return '';
+      try {
+        const d = new Date(ts);
+        return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
+      } catch { return ts; }
+    }
+
+    // ─── INLINE DETAIL (EXPAND/COLLAPSE) ─────────────────────────────
+    function toggleDetail(row, trEl) {
+      const existing = trEl.nextElementSibling;
+      if (existing && existing.classList.contains('detail-row')) {
+        existing.remove();
+        trEl.classList.remove('selected');
+        return;
+      }
+
+      trEl.classList.add('selected');
+
+      const detailTr = document.createElement('tr');
+      detailTr.classList.add('detail-row');
+      const td = document.createElement('td');
+      td.setAttribute('colspan', colCount);
+
+      // Grouped SetAttributes
+      if (row._isGroup) {
+        let html = '<div class="detail-inner" style="border-left-color:#8b5cf6">';
+        html += '<div class="detail-sections"><div class="detail-col">';
+        html += `<div class="detail-section"><h4>Attributes Set (${row.rows.length})</h4>`;
+        html += '<table class="group-attrs-table"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>';
+        row.rows.forEach(r => {
+          const p = r.Parameters || {};
+          html += `<tr><td>${esc(p.Key || '')}</td><td>${esc(p.Value || '')}</td></tr>`;
+        });
+        html += '</tbody></table></div></div>';
+        html += '<div class="detail-col">';
+        html += '<div class="detail-section"><h4>Block Info</h4><table class="kv-table">';
+        html += kvRow('Flow', row.ContactFlowName);
+        html += kvRow('Identifier', row.Identifier);
+        html += kvRow('Time Range', formatTime(row.rows[0].Timestamp) + ' → ' + formatTime(row.rows[row.rows.length - 1].Timestamp));
+        html += kvRow('Flow ID', row.ContactFlowId);
+        html += '</table></div></div>';
+        html += '</div></div>';
+        td.innerHTML = html;
+        detailTr.appendChild(td);
+        trEl.after(detailTr);
+        return;
+      }
+
+      const isError = hasError(row);
+      const isLambda = row.ContactFlowModuleType === 'InvokeExternalResource';
+      let html = `<div class="detail-inner${isError ? ' has-error' : ''}">`;
+      html += '<div class="detail-sections">';
+
+      if (isLambda) {
+        // Lambda layout: left = params + results, right = block info
+        html += '<div class="detail-col">';
+        if (row.Parameters && Object.keys(row.Parameters).length > 0) {
+          html += '<div class="detail-section"><h4>Parameters</h4>';
+          html += `<pre>${esc(JSON.stringify(row.Parameters, null, 2))}</pre></div>`;
+        }
+        if (row.ExternalResults) {
+          const label = isError ? 'External Results (has errors)' : 'External Results';
+          html += `<div class="detail-section"><h4>${label}</h4>`;
+          html += `<pre>${esc(JSON.stringify(row.ExternalResults, null, 2))}</pre></div>`;
+        }
+        html += '</div>';
+
+        html += '<div class="detail-col">';
+        html += '<div class="detail-section"><h4>Block Info</h4><table class="kv-table">';
+        html += kvRow('Flow', row.ContactFlowName);
+        html += kvRow('Type', row.ContactFlowModuleType);
+        html += kvRow('Identifier', row.Identifier);
+        html += kvRow('Timestamp', row.Timestamp);
+        html += kvRow('Flow ID', row.ContactFlowId);
+        html += '</table></div>';
+        html += '</div>';
+      } else {
+        // Non-lambda layout: left = block info + result, right = params
+        html += '<div class="detail-col">';
+        html += '<div class="detail-section"><h4>Block Info</h4><table class="kv-table">';
+        html += kvRow('Flow', row.ContactFlowName);
+        html += kvRow('Type', row.ContactFlowModuleType);
+        if (row.Results != null) html += kvRow('Result', row.Results);
+        html += kvRow('Identifier', row.Identifier);
+        html += kvRow('Timestamp', row.Timestamp);
+        html += kvRow('Flow ID', row.ContactFlowId);
+        html += '</table></div>';
+        html += '</div>';
+
+        html += '<div class="detail-col">';
+        if (row.Parameters && Object.keys(row.Parameters).length > 0) {
+          html += '<div class="detail-section"><h4>Parameters</h4>';
+          html += `<pre>${esc(JSON.stringify(row.Parameters, null, 2))}</pre></div>`;
+        }
+        html += '</div>';
+      }
+
+      // Raw row
+      html += '<details class="raw-row"><summary>Raw Row (all fields)</summary>';
+      html += `<pre>${esc(JSON.stringify(row._raw, null, 2))}</pre></details>`;
+
+      html += '</div></div>';
+      td.innerHTML = html;
+      detailTr.appendChild(td);
+      trEl.after(detailTr);
+    }
+
+    function kvRow(label, value) {
+      return `<tr><td>${esc(label)}</td><td>${esc(value || '')}</td></tr>`;
+    }
+
+    // ─── CALL FLOW DIAGRAM (SVG) ────────────────────────────────────
+    const flowBtn = document.getElementById('flow-btn');
+    const flowOverlay = document.getElementById('flow-overlay');
+    const flowCanvas = document.getElementById('flow-canvas');
+    const NS = 'http://www.w3.org/2000/svg';
+
+    flowBtn.addEventListener('click', () => {
+      renderFlowDiagram();
+      flowOverlay.classList.add('open');
+    });
+    flowOverlay.addEventListener('click', e => {
+      if (e.target === flowOverlay) flowOverlay.classList.remove('open');
+    });
+    flowOverlay.querySelector('.close-btn').addEventListener('click', () => {
+      flowOverlay.classList.remove('open');
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') flowOverlay.classList.remove('open');
+    });
+
+    function buildFlowPath() {
+      const steps = [];
+      let prev = null;
+      for (const row of rawData) {
+        const name = row.ContactFlowName;
+        if (!name || name === prev) continue;
+        const isModule = (row.ContactFlowId || '').includes('/flow-module/');
+        steps.push({ name, isModule });
+        prev = name;
+      }
+      // Count total blocks per flow name
+      const counts = {};
+      rawData.forEach(r => { counts[r.ContactFlowName] = (counts[r.ContactFlowName] || 0) + 1; });
+      steps.forEach(s => s.count = counts[s.name] || 0);
+      return steps;
+    }
+
+    function renderFlowDiagram() {
+      const steps = buildFlowPath();
+      flowCanvas.innerHTML = '';
+
+      const perRow = Math.min(5, Math.max(2, steps.length));
+      const nodeW = 160, nodeH = 52, padX = 30, padY = 24;
+      const gapX = 60, gapY = 36;
+
+      const rows = [];
+      for (let i = 0; i < steps.length; i += perRow) rows.push(steps.slice(i, i + perRow));
+
+      const totalH = padY * 2 + rows.length * nodeH + (rows.length - 1) * gapY;
+      const totalW = padX * 2 + perRow * nodeW + (perRow - 1) * gapX;
+      flowCanvas.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+      flowCanvas.style.height = Math.min(totalH, 500) + 'px';
+
+      // Defs for arrowhead
+      const defs = svgEl('defs');
+      defs.innerHTML = '<marker id="ah" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/></marker>';
+      flowCanvas.appendChild(defs);
+
+      const positions = []; // {cx, cy} center of each node
+
+      rows.forEach((row, ri) => {
+        // Alternate direction: even rows L→R, odd rows R→L
+        const reversed = ri % 2 === 1;
+        const items = reversed ? [...row].reverse() : row;
+
+        items.forEach((step, ci) => {
+          const actualCi = reversed ? (row.length - 1 - ci) : ci;
+          const globalIdx = ri * perRow + actualCi;
+
+          const x = padX + ci * (nodeW + gapX);
+          const y = padY + ri * (nodeH + gapY);
+
+          // Node rect
+          const rect = svgEl('rect', {
+            x, y, width: nodeW, height: nodeH,
+            rx: 10, ry: 10,
+            fill: step.isModule ? '#eff6ff' : '#ffffff',
+            stroke: '#2563eb', 'stroke-width': 2
+          });
+          flowCanvas.appendChild(rect);
+
+          // Flow name
+          const nameText = svgEl('text', {
+            x: x + nodeW / 2, y: y + 21,
+            'text-anchor': 'middle', 'font-size': '11', 'font-weight': 'bold', fill: '#1e3a5f'
+          });
+          nameText.textContent = step.name;
+          flowCanvas.appendChild(nameText);
+
+          // Meta line
+          const metaText = svgEl('text', {
+            x: x + nodeW / 2, y: y + 37,
+            'text-anchor': 'middle', 'font-size': '9.5', fill: '#6b7280'
+          });
+          metaText.textContent = `${step.isModule ? 'Module' : 'Flow'} · ${step.count} blocks`;
+          flowCanvas.appendChild(metaText);
+
+          positions[globalIdx] = { cx: x + nodeW / 2, cy: y + nodeH / 2, x, y };
+        });
+      });
+
+      // Draw connectors
+      for (let i = 0; i < steps.length - 1; i++) {
+        const from = positions[i];
+        const to = positions[i + 1];
+        const fromRow = Math.floor(i / perRow);
+        const toRow = Math.floor((i + 1) / perRow);
+
+        if (fromRow === toRow) {
+          // Same row: straight horizontal arrow
+          const dir = to.cx > from.cx ? 1 : -1;
+          const x1 = from.cx + dir * (nodeW / 2 + 2);
+          const x2 = to.cx - dir * (nodeW / 2 + 2);
+          const line = svgEl('line', {
+            x1, y1: from.cy, x2, y2: to.cy,
+            stroke: '#2563eb', 'stroke-width': 2, 'marker-end': 'url(#ah)'
+          });
+          flowCanvas.appendChild(line);
+        } else {
+          // Different row: curved path going down
+          const fromEdgeY = from.y + nodeH + 2;
+          const toEdgeY = to.y - 2;
+          const midY = (fromEdgeY + toEdgeY) / 2;
+
+          const path = svgEl('path', {
+            d: `M ${from.cx} ${fromEdgeY} C ${from.cx} ${midY}, ${to.cx} ${midY}, ${to.cx} ${toEdgeY}`,
+            stroke: '#2563eb', 'stroke-width': 2, fill: 'none', 'marker-end': 'url(#ah)'
+          });
+          flowCanvas.appendChild(path);
+        }
+      }
+
+      // Step numbers
+      for (let i = 0; i < steps.length; i++) {
+        const p = positions[i];
+        const badge = svgEl('circle', { cx: p.x + 8, cy: p.y - 3, r: 8, fill: '#2563eb' });
+        flowCanvas.appendChild(badge);
+        const num = svgEl('text', {
+          x: p.x + 8, y: p.y + 1, 'text-anchor': 'middle', 'font-size': '9', 'font-weight': 'bold', fill: 'white'
+        });
+        num.textContent = i + 1;
+        flowCanvas.appendChild(num);
+      }
+    }
+
+    function svgEl(tag, attrs) {
+      const el = document.createElementNS(NS, tag);
+      if (attrs) Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+      return el;
+    }
+
+    // ─── UTILS ───────────────────────────────────────────────────────
+    function esc(str) {
+      const d = document.createElement('div');
+      d.textContent = String(str);
+      return d.innerHTML;
+    }
+  </script>
+</body>
+</html>
