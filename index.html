@@ -324,9 +324,21 @@
       width: 100%;
       display: block;
     }
+    #build-badge {
+      position: fixed;
+      bottom: 4px;
+      right: 6px;
+      font-size: 0.65rem;
+      color: #9ca3af;
+      opacity: 0.6;
+      z-index: 1000;
+      pointer-events: none;
+      font-family: monospace;
+    }
   </style>
 </head>
 <body>
+  <div id="build-badge"></div>
   <main>
     <div id="top-bar">
       <div id="drop-zone">
@@ -373,6 +385,9 @@
 
   <script>
     // ─── CONFIGURATION ──────────────────────────────────────────────
+    // Bump this on every edit so the on-page badge reflects the last change, not page-load time.
+    const BUILD_VERSION = '2026-09-16 14:32';
+    document.getElementById('build-badge').textContent = 'v' + BUILD_VERSION;
     const QUICK_FILTERS = ['InvokeExternalResource', 'PlayPrompt', 'SetAttributes', 'CheckAttribute', 'InvokeFlowModule'];
     const MAX_RENDER_ROWS = 500;
     // ─────────────────────────────────────────────────────────────────
@@ -423,14 +438,14 @@
           const parsed = results.data
             .map(row => {
               try {
-                const msg = JSON.parse(row.message || row.Message || '{}');
+                const msg = JSON.parse(row.message || row.Message || row['@message'] || '{}');
                 return { _raw: msg, ...msg };
               } catch { return null; }
             })
             .filter(Boolean);
 
           if (parsed.length === 0) {
-            uploadInfo.innerHTML = '<strong>Error:</strong> No valid rows found. Check that the CSV has <code>timestamp</code> and <code>message</code> columns.';
+            uploadInfo.innerHTML = '<strong>Error:</strong> No valid rows found. Check that the CSV has a <code>message</code> (or <code>@message</code>) column with valid JSON.';
             uploadInfo.style.display = 'block';
             return;
           }
