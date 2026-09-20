@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node t.js)",
+      "Bash(ls /Applications | grep -i -E \"chrome|chromium|edge|brave\" ; ls \"/Applications/Google Chrome.app/Contents/MacOS/\" 2>/dev/null)",
+      "Read(//Applications/**)",
+      "Read(//Applications/Google Chrome.app/Contents/MacOS/**)",
+      "Bash(node -e ' *)",
+      "Bash(python3 -)",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --virtual-time-budget=5000 --dump-dom /private/tmp/claude-501/-Users-olivercera-work-NF-amazon-connect-log-viewer/f9c9134e-54a2-4bfd-8a8c-832d8e88aa5c/scratchpad/harness2.html)",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}
