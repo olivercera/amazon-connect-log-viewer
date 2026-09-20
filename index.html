@@ -150,9 +150,11 @@
       max-height: 320px;
       overflow-y: auto;
     }
-    .ms-item {
+    /* Specificity has to beat Pico's label:has(> [type=checkbox]) rule,
+       which shrink-wraps labels that wrap a checkbox. */
+    .ms-list .ms-item {
       display: flex;
-      width: 100%; /* Pico shrink-wraps labels wrapping a checkbox */
+      width: 100%;
       align-items: center;
       gap: 0.4rem;
       padding: 0.15rem 0.3rem;
