@@ -96,6 +96,96 @@
       border-color: var(--pico-secondary-border);
     }
 
+    .multiselect {
+      position: relative;
+    }
+    .multiselect > button.ms-trigger {
+      padding: 0.25rem 0.75rem;
+      font-size: 0.8rem;
+      margin: 0;
+      width: auto;
+      white-space: nowrap;
+      background: var(--pico-secondary-background);
+      color: var(--pico-secondary);
+      border-color: var(--pico-secondary-border);
+    }
+    .multiselect > button.ms-trigger.filtered {
+      background: var(--pico-primary);
+      color: var(--pico-primary-inverse);
+      border-color: var(--pico-primary);
+    }
+    .ms-panel {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      z-index: 300;
+      min-width: 260px;
+      max-width: 380px;
+      padding: 0.4rem;
+      background: var(--pico-card-background-color);
+      border: 1px solid var(--pico-muted-border-color);
+      border-radius: var(--pico-border-radius);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    }
+    .multiselect.open .ms-panel { display: block; }
+    .ms-panel input.ms-search {
+      padding: 0.25rem 0.4rem;
+      font-size: 0.8rem;
+      margin: 0 0 0.35rem;
+      height: auto;
+    }
+    .ms-actions {
+      display: flex;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      padding-bottom: 0.35rem;
+      margin-bottom: 0.25rem;
+      border-bottom: 1px solid var(--pico-muted-border-color);
+    }
+    .ms-actions a { cursor: pointer; }
+    .ms-list {
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .ms-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.15rem 0.3rem;
+      font-size: 0.8rem;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .ms-item:hover { background: var(--highlight-bg); }
+    .ms-item input[type=checkbox] {
+      margin: 0;
+      flex: none;
+      --pico-form-element-spacing-vertical: 0;
+    }
+    .ms-item .ms-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ms-item .ms-count {
+      font-size: 0.72rem;
+      color: var(--pico-muted-color);
+      font-variant-numeric: tabular-nums;
+    }
+    .ms-item .ms-only {
+      font-size: 0.7rem;
+      visibility: hidden;
+      cursor: pointer;
+    }
+    .ms-item:hover .ms-only { visibility: visible; }
+    .ms-empty {
+      font-size: 0.78rem;
+      color: var(--pico-muted-color);
+      padding: 0.3rem;
+    }
+
     #search-mode {
       display: flex;
       gap: 0;
@@ -396,8 +486,8 @@
     </div>
 
     <div id="filters">
-      <select id="flow-select" title="Flow Name"></select>
-      <select id="block-select" title="Block Type"></select>
+      <div id="flow-filter" class="multiselect"></div>
+      <div id="block-filter" class="multiselect"></div>
       <div id="quick-filters"></div>
       <input type="search" id="search-input" placeholder="Search all fields..." title="Free text search">
       <div id="search-mode" title="Filter rows, or keep all rows and just highlight matches">
@@ -428,7 +518,7 @@
   <script>
     // ─── CONFIGURATION ──────────────────────────────────────────────
     // Bump this on every edit so the on-page badge reflects the last change, not page-load time.
-    const BUILD_VERSION = '2026-09-20 16:35';
+    const BUILD_VERSION = '2026-09-20 16:45';
     document.getElementById('build-badge').textContent = 'v' + BUILD_VERSION;
     const QUICK_FILTERS = ['InvokeExternalResource', 'PlayPrompt', 'SetAttributes', 'CheckAttribute', 'InvokeFlowModule'];
     const MAX_RENDER_ROWS = 500;
@@ -436,8 +526,6 @@
 
     // ─── STATE ───────────────────────────────────────────────────────
     let rawData = [];
-    let activeFlow = 'ALL';
-    let activeBlock = 'ALL';
     // ─────────────────────────────────────────────────────────────────
 
     // ─── DOM REFS ────────────────────────────────────────────────────
@@ -445,8 +533,8 @@
     const fileInput = document.getElementById('file-input');
     const uploadInfo = document.getElementById('upload-info');
     const filtersEl = document.getElementById('filters');
-    const flowSelect = document.getElementById('flow-select');
-    const blockSelect = document.getElementById('block-select');
+    const flowFilterEl = document.getElementById('flow-filter');
+    const blockFilterEl = document.getElementById('block-filter');
     const quickFiltersEl = document.getElementById('quick-filters');
     const rowCount = document.getElementById('row-count');
     const tableWrapper = document.getElementById('results-table-wrapper');
@@ -521,25 +609,181 @@
       });
     }
 
+    // ─── MULTI-SELECT FILTER COMPONENT ───────────────────────────────
+    // Excel-autofilter-style checkbox dropdown. Values are all selected by
+    // default, so an untouched instance behaves like the old "All" option.
+    function createMultiSelect({ mount, label, labelFn, onChange }) {
+      let values = [];           // [{ value, count }]
+      let selected = new Set();
+      const shown = labelFn || (v => v);
+
+      const trigger = document.createElement('button');
+      trigger.className = 'ms-trigger';
+      trigger.type = 'button';
+
+      const panel = document.createElement('div');
+      panel.className = 'ms-panel';
+      panel.innerHTML =
+        `<input type="search" class="ms-search" placeholder="Filter ${esc(label.toLowerCase())}...">` +
+        '<div class="ms-actions"><a data-act="all">All</a><a data-act="none">None</a><a data-act="invert">Invert</a></div>' +
+        '<div class="ms-list"></div>';
+      const searchBox = panel.querySelector('.ms-search');
+      const list = panel.querySelector('.ms-list');
+
+      mount.appendChild(trigger);
+      mount.appendChild(panel);
+
+      function visibleValues() {
+        const q = searchBox.value.toLowerCase();
+        return values.filter(v => !q || shown(v.value).toLowerCase().includes(q));
+      }
+
+      function updateTrigger() {
+        const n = selected.size, total = values.length;
+        let text;
+        if (total === 0) text = `${label}: —`;
+        else if (n === total) text = `${label}: All (${total})`;
+        else if (n === 0) text = `${label}: None`;
+        else text = `${label}: ${n} of ${total}`;
+        trigger.textContent = text + ' ▾';
+        trigger.classList.toggle('filtered', total > 0 && n !== total);
+      }
+
+      function renderList() {
+        list.innerHTML = '';
+        const vis = visibleValues();
+        if (!vis.length) {
+          list.innerHTML = '<div class="ms-empty">No matches</div>';
+          return;
+        }
+        for (const { value, count } of vis) {
+          const item = document.createElement('label');
+          item.className = 'ms-item';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = selected.has(value);
+          cb.addEventListener('change', () => {
+            if (cb.checked) selected.add(value); else selected.delete(value);
+            updateTrigger();
+            onChange();
+          });
+          const name = document.createElement('span');
+          name.className = 'ms-label';
+          name.textContent = shown(value);
+          name.title = value;
+          const cnt = document.createElement('span');
+          cnt.className = 'ms-count';
+          cnt.textContent = count;
+          const only = document.createElement('a');
+          only.className = 'ms-only';
+          only.textContent = 'only';
+          only.addEventListener('click', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            api.selectOnly(value);
+            onChange();
+          });
+          item.append(cb, name, cnt, only);
+          list.appendChild(item);
+        }
+      }
+
+      trigger.addEventListener('click', e => {
+        e.stopPropagation();
+        const wasOpen = mount.classList.contains('open');
+        closeAllMultiSelects();
+        if (!wasOpen) {
+          mount.classList.add('open');
+          renderList();
+          searchBox.focus();
+        }
+      });
+      panel.addEventListener('click', e => e.stopPropagation());
+      searchBox.addEventListener('input', renderList);
+      panel.querySelector('.ms-actions').addEventListener('click', e => {
+        const act = e.target.dataset.act;
+        if (!act) return;
+        const vis = visibleValues().map(v => v.value);
+        if (act === 'all') vis.forEach(v => selected.add(v));
+        else if (act === 'none') vis.forEach(v => selected.delete(v));
+        else vis.forEach(v => selected.has(v) ? selected.delete(v) : selected.add(v));
+        renderList();
+        updateTrigger();
+        onChange();
+      });
+
+      const api = {
+        el: mount,
+        setValues(newValues) {
+          values = newValues;
+          selected = new Set(newValues.map(v => v.value));
+          searchBox.value = '';
+          updateTrigger();
+          renderList();
+        },
+        // True when everything is selected, so unknown/blank values are never
+        // silently dropped by an untouched filter.
+        isSelected(v) {
+          if (selected.size === values.length) return true;
+          return selected.has(v);
+        },
+        selectAll() {
+          selected = new Set(values.map(v => v.value));
+          updateTrigger();
+          renderList();
+        },
+        selectOnly(v) {
+          selected = new Set([v]);
+          updateTrigger();
+          renderList();
+        },
+        isAllSelected() { return values.length > 0 && selected.size === values.length; },
+        isOnly(v) { return selected.size === 1 && selected.has(v); },
+        close() { mount.classList.remove('open'); }
+      };
+      multiSelects.push(api);
+      updateTrigger();
+      return api;
+    }
+
+    const multiSelects = [];
+    function closeAllMultiSelects() { multiSelects.forEach(ms => ms.close()); }
+    document.addEventListener('click', closeAllMultiSelects);
+
+    const flowFilter = createMultiSelect({
+      mount: flowFilterEl, label: 'Flows',
+      onChange: applyFilters
+    });
+    const blockFilter = createMultiSelect({
+      mount: blockFilterEl, label: 'Blocks', labelFn: shortLabel,
+      onChange: () => { updateQuickFilterActive(); applyFilters(); }
+    });
+
     // ─── FILTERS ─────────────────────────────────────────────────────
+    function countBy(key) {
+      const counts = new Map();
+      for (const r of rawData) {
+        const v = r[key];
+        if (!v) continue;
+        counts.set(v, (counts.get(v) || 0) + 1);
+      }
+      return [...counts.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([value, count]) => ({ value, count }));
+    }
+
     function populateFilters() {
-      const flows = [...new Set(rawData.map(r => r.ContactFlowName).filter(Boolean))].sort();
-      const blocks = [...new Set(rawData.map(r => r.ContactFlowModuleType).filter(Boolean))].sort();
+      const blockValues = countBy('ContactFlowModuleType');
+      flowFilter.setValues(countBy('ContactFlowName'));
+      blockFilter.setValues(blockValues);
+      const blocks = blockValues.map(b => b.value);
 
-      flowSelect.innerHTML = '<option value="ALL">All Flows</option>' +
-        flows.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
-
-      blockSelect.innerHTML = '<option value="ALL">All Types</option>' +
-        blocks.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
-
-      // Quick filter buttons
+      // Quick filter buttons — shortcuts over the block multi-select
       quickFiltersEl.innerHTML = '';
       const allBtn = document.createElement('button');
       allBtn.textContent = 'All';
-      allBtn.classList.add('active');
       allBtn.addEventListener('click', () => {
-        activeBlock = 'ALL';
-        blockSelect.value = 'ALL';
+        blockFilter.selectAll();
         updateQuickFilterActive();
         applyFilters();
       });
@@ -551,13 +795,13 @@
         btn.textContent = shortLabel(qf);
         btn.dataset.value = qf;
         btn.addEventListener('click', () => {
-          activeBlock = qf;
-          blockSelect.value = qf;
+          blockFilter.selectOnly(qf);
           updateQuickFilterActive();
           applyFilters();
         });
         quickFiltersEl.appendChild(btn);
       }
+      updateQuickFilterActive();
     }
 
     function shortLabel(type) {
@@ -571,19 +815,15 @@
       return map[type] || type;
     }
 
+    // A pill lights up only when it exactly describes the current selection:
+    // "All" when everything is on, a type pill when it is the sole selection.
     function updateQuickFilterActive() {
       quickFiltersEl.querySelectorAll('button').forEach(btn => {
-        const val = btn.dataset.value || 'ALL';
-        btn.classList.toggle('active', val === activeBlock);
+        const val = btn.dataset.value;
+        btn.classList.toggle('active', val ? blockFilter.isOnly(val) : blockFilter.isAllSelected());
       });
     }
 
-    flowSelect.addEventListener('change', () => { activeFlow = flowSelect.value; applyFilters(); });
-    blockSelect.addEventListener('change', () => {
-      activeBlock = blockSelect.value;
-      updateQuickFilterActive();
-      applyFilters();
-    });
     searchInput.addEventListener('input', () => { activeSearch = searchInput.value.toLowerCase(); applyFilters(); });
     searchModeEl.addEventListener('click', e => {
       const btn = e.target.closest('button[data-mode]');
@@ -612,8 +852,8 @@
     // ─── APPLY FILTERS & RENDER ──────────────────────────────────────
     function applyFilters() {
       let data = rawData;
-      if (activeFlow !== 'ALL') data = data.filter(r => r.ContactFlowName === activeFlow);
-      if (activeBlock !== 'ALL') data = data.filter(r => r.ContactFlowModuleType === activeBlock);
+      data = data.filter(r => flowFilter.isSelected(r.ContactFlowName)
+        && blockFilter.isSelected(r.ContactFlowModuleType));
       let matchCount = 0;
       if (activeSearch) {
         const matches = r => JSON.stringify(r._raw).toLowerCase().includes(activeSearch);
@@ -891,7 +1131,9 @@
       flowOverlay.classList.remove('open');
     });
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') flowOverlay.classList.remove('open');
+      if (e.key !== 'Escape') return;
+      flowOverlay.classList.remove('open');
+      closeAllMultiSelects();
     });
 
     function buildFlowPath() {
