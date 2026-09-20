@@ -152,6 +152,7 @@
     }
     .ms-item {
       display: flex;
+      width: 100%; /* Pico shrink-wraps labels wrapping a checkbox */
       align-items: center;
       gap: 0.4rem;
       padding: 0.15rem 0.3rem;
@@ -520,7 +521,7 @@
   <script>
     // ─── CONFIGURATION ──────────────────────────────────────────────
     // Bump this on every edit so the on-page badge reflects the last change, not page-load time.
-    const BUILD_VERSION = '2026-09-20 16:45';
+    const BUILD_VERSION = '2026-09-20 17:12';
     document.getElementById('build-badge').textContent = 'v' + BUILD_VERSION;
     const QUICK_FILTERS = ['InvokeExternalResource', 'PlayPrompt', 'SetAttributes', 'CheckAttribute', 'InvokeFlowModule'];
     const MAX_RENDER_ROWS = 500;
