@@ -13,6 +13,8 @@
       --lambda-bg: #f0f7ff;
       --lambda-border: #3498db;
       --highlight-bg: #fffde7;
+      --search-hit-bg: #ffe066;
+      --search-hit-color: #3d2c00;
     }
 
     body { padding: 0.75rem 1rem; }
@@ -92,6 +94,42 @@
       background: var(--pico-secondary-background);
       color: var(--pico-secondary);
       border-color: var(--pico-secondary-border);
+    }
+
+    #search-mode {
+      display: flex;
+      gap: 0;
+    }
+    #search-mode button {
+      padding: 0.25rem 0.6rem;
+      font-size: 0.8rem;
+      margin: 0;
+      width: auto;
+      border-radius: 0;
+    }
+    #search-mode button:first-child {
+      border-top-left-radius: var(--pico-border-radius);
+      border-bottom-left-radius: var(--pico-border-radius);
+    }
+    #search-mode button:last-child {
+      border-top-right-radius: var(--pico-border-radius);
+      border-bottom-right-radius: var(--pico-border-radius);
+    }
+    #search-mode button.active {
+      background: var(--pico-primary);
+      color: var(--pico-primary-inverse);
+    }
+    #search-mode button:not(.active) {
+      background: var(--pico-secondary-background);
+      color: var(--pico-secondary);
+      border-color: var(--pico-secondary-border);
+    }
+
+    mark.search-hit {
+      background: var(--search-hit-bg);
+      color: var(--search-hit-color);
+      border-radius: 2px;
+      padding: 0 1px;
     }
 
     #row-count {
@@ -362,6 +400,10 @@
       <select id="block-select" title="Block Type"></select>
       <div id="quick-filters"></div>
       <input type="search" id="search-input" placeholder="Search all fields..." title="Free text search">
+      <div id="search-mode" title="Filter rows, or keep all rows and just highlight matches">
+        <button data-mode="filter" class="active">Filter</button>
+        <button data-mode="highlight">Highlight</button>
+      </div>
       <button id="expand-all-btn" style="display:none;padding:0.3rem 0.75rem;font-size:0.8rem;margin:0;width:auto;white-space:nowrap" title="Expand or collapse all rows">Expand All</button>
       <span id="row-count"></span>
     </div>
@@ -386,7 +428,7 @@
   <script>
     // ─── CONFIGURATION ──────────────────────────────────────────────
     // Bump this on every edit so the on-page badge reflects the last change, not page-load time.
-    const BUILD_VERSION = '2026-09-16 14:32';
+    const BUILD_VERSION = '2026-09-20 16:35';
     document.getElementById('build-badge').textContent = 'v' + BUILD_VERSION;
     const QUICK_FILTERS = ['InvokeExternalResource', 'PlayPrompt', 'SetAttributes', 'CheckAttribute', 'InvokeFlowModule'];
     const MAX_RENDER_ROWS = 500;
@@ -412,7 +454,9 @@
     const colCount = 6;
     const searchInput = document.getElementById('search-input');
     const expandAllBtn = document.getElementById('expand-all-btn');
+    const searchModeEl = document.getElementById('search-mode');
     let activeSearch = '';
+    let searchMode = 'filter';
     let allExpanded = false;
     // ─────────────────────────────────────────────────────────────────
 
@@ -541,6 +585,13 @@
       applyFilters();
     });
     searchInput.addEventListener('input', () => { activeSearch = searchInput.value.toLowerCase(); applyFilters(); });
+    searchModeEl.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-mode]');
+      if (!btn) return;
+      searchMode = btn.dataset.mode;
+      searchModeEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+      applyFilters();
+    });
     expandAllBtn.addEventListener('click', () => {
       allExpanded = !allExpanded;
       expandAllBtn.textContent = allExpanded ? 'Collapse All' : 'Expand All';
@@ -563,17 +614,18 @@
       let data = rawData;
       if (activeFlow !== 'ALL') data = data.filter(r => r.ContactFlowName === activeFlow);
       if (activeBlock !== 'ALL') data = data.filter(r => r.ContactFlowModuleType === activeBlock);
+      let matchCount = 0;
       if (activeSearch) {
-        data = data.filter(r => {
-          const haystack = JSON.stringify(r._raw).toLowerCase();
-          return haystack.includes(activeSearch);
-        });
+        const matches = r => JSON.stringify(r._raw).toLowerCase().includes(activeSearch);
+        matchCount = data.filter(matches).length;
+        if (searchMode === 'filter') data = data.filter(matches);
       }
 
       const total = rawData.length;
       const shown = Math.min(data.length, MAX_RENDER_ROWS);
       rowCount.textContent = `${shown} of ${total}` +
-        (data.length > MAX_RENDER_ROWS ? ` (capped ${MAX_RENDER_ROWS})` : '');
+        (data.length > MAX_RENDER_ROWS ? ` (capped ${MAX_RENDER_ROWS})` : '') +
+        (activeSearch ? ` · ${matchCount ? matchCount + ' matches' : 'no matches'}` : '');
 
       renderTable(groupRows(data.slice(0, MAX_RENDER_ROWS)));
     }
@@ -642,6 +694,44 @@
         tr.addEventListener('click', () => toggleDetail(row, tr));
         tbody.appendChild(tr);
       });
+      highlightIn(tbody);
+    }
+
+    // Wrap every occurrence of the current search term in <mark>, in place.
+    // Literal (non-regex) case-insensitive matching; leaves markup and
+    // event handlers untouched since only text nodes are split.
+    function highlightIn(root) {
+      if (!activeSearch) return;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          if (!node.nodeValue || !node.nodeValue.toLowerCase().includes(activeSearch)) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          const tag = node.parentNode && node.parentNode.nodeName;
+          if (tag === 'MARK' || tag === 'SCRIPT' || tag === 'STYLE') return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      const targets = [];
+      while (walker.nextNode()) targets.push(walker.currentNode);
+
+      const len = activeSearch.length;
+      for (const node of targets) {
+        const text = node.nodeValue;
+        const lower = text.toLowerCase();
+        const frag = document.createDocumentFragment();
+        let pos = 0, idx;
+        while ((idx = lower.indexOf(activeSearch, pos)) !== -1) {
+          if (idx > pos) frag.appendChild(document.createTextNode(text.slice(pos, idx)));
+          const mark = document.createElement('mark');
+          mark.className = 'search-hit';
+          mark.textContent = text.slice(idx, idx + len);
+          frag.appendChild(mark);
+          pos = idx + len;
+        }
+        if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+        node.parentNode.replaceChild(frag, node);
+      }
     }
 
     function hasError(row) {
@@ -716,6 +806,7 @@
         td.innerHTML = html;
         detailTr.appendChild(td);
         trEl.after(detailTr);
+        highlightIn(detailTr);
         return;
       }
 
@@ -776,6 +867,7 @@
       td.innerHTML = html;
       detailTr.appendChild(td);
       trEl.after(detailTr);
+      highlightIn(detailTr);
     }
 
     function kvRow(label, value) {
