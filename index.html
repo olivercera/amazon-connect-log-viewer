@@ -15,6 +15,16 @@
       --highlight-bg: #fffde7;
       --search-hit-bg: #ffe066;
       --search-row-tint: rgba(255, 224, 102, 0.3);
+      --delta-warn: #b45309;
+      --delta-slow: #b91c1c;
+      /* Toggle buttons: quiet outline when off, solid accent when on. */
+      --toggle-bg: transparent;
+      --toggle-color: #475569;
+      --toggle-border: #cbd5e1;
+      --toggle-hover-bg: #f1f5f9;
+      --toggle-on-bg: #2563eb;
+      --toggle-on-hover-bg: #1d4ed8;
+      --toggle-on-color: #ffffff;
       --search-hit-color: #3d2c00;
     }
 
@@ -83,40 +93,43 @@
       flex-wrap: wrap;
       align-items: center;
     }
-    #quick-filters button {
+    /* One look for every toggle in the filter bar: quick filters, the
+       multi-select triggers and the search-mode switch. Pico's "secondary"
+       fill made inactive buttons read as heavy slate blocks that competed
+       with the active one, so off-state is now a quiet outline. */
+    #quick-filters button,
+    .multiselect > button.ms-trigger,
+    #search-mode button,
+    #expand-all-btn {
       padding: 0.25rem 0.75rem;
       font-size: 0.8rem;
       margin: 0;
       width: auto;
+      background: var(--toggle-bg);
+      color: var(--toggle-color);
+      border: 1px solid var(--toggle-border);
+      font-weight: 500;
     }
-    #quick-filters button.active {
-      background: var(--pico-primary);
-      color: var(--pico-primary-inverse);
+    #quick-filters button:hover,
+    .multiselect > button.ms-trigger:hover,
+    #search-mode button:hover,
+    #expand-all-btn:hover {
+      background: var(--toggle-hover-bg);
+      color: var(--toggle-color);
+      border-color: var(--toggle-border);
     }
-    #quick-filters button:not(.active) {
-      background: var(--pico-secondary-background);
-      color: var(--pico-secondary);
-      border-color: var(--pico-secondary-border);
+    #quick-filters button.active,
+    .multiselect > button.ms-trigger.filtered,
+    #search-mode button.active {
+      background: var(--toggle-on-bg);
+      color: var(--toggle-on-color);
+      border-color: var(--toggle-on-bg);
     }
 
     .multiselect {
       position: relative;
     }
-    .multiselect > button.ms-trigger {
-      padding: 0.25rem 0.75rem;
-      font-size: 0.8rem;
-      margin: 0;
-      width: auto;
-      white-space: nowrap;
-      background: var(--pico-secondary-background);
-      color: var(--pico-secondary);
-      border-color: var(--pico-secondary-border);
-    }
-    .multiselect > button.ms-trigger.filtered {
-      background: var(--pico-primary);
-      color: var(--pico-primary-inverse);
-      border-color: var(--pico-primary);
-    }
+    .multiselect > button.ms-trigger { white-space: nowrap; }
     .ms-panel {
       display: none;
       position: absolute;
@@ -196,13 +209,8 @@
       display: flex;
       gap: 0;
     }
-    #search-mode button {
-      padding: 0.25rem 0.6rem;
-      font-size: 0.8rem;
-      margin: 0;
-      width: auto;
-      border-radius: 0;
-    }
+    /* Segmented control: collapse the shared border between the two halves. */
+    #search-mode button { border-radius: 0; padding: 0.25rem 0.6rem; }
     #search-mode button:first-child {
       border-top-left-radius: var(--pico-border-radius);
       border-bottom-left-radius: var(--pico-border-radius);
@@ -210,15 +218,7 @@
     #search-mode button:last-child {
       border-top-right-radius: var(--pico-border-radius);
       border-bottom-right-radius: var(--pico-border-radius);
-    }
-    #search-mode button.active {
-      background: var(--pico-primary);
-      color: var(--pico-primary-inverse);
-    }
-    #search-mode button:not(.active) {
-      background: var(--pico-secondary-background);
-      color: var(--pico-secondary);
-      border-color: var(--pico-secondary-border);
+      border-left-width: 0;
     }
 
     mark.search-hit {
@@ -268,6 +268,24 @@
     }
     #results-table tbody tr.lambda-row {
       border-left: 3px solid var(--lambda-border);
+    }
+    #results-table td.delta-cell {
+      font-variant-numeric: tabular-nums;
+      font-size: 0.78rem;
+      color: var(--pico-muted-color);
+      white-space: nowrap;
+      text-align: right;
+    }
+    #results-table td.delta-warn { color: var(--delta-warn); font-weight: 600; }
+    #results-table td.delta-slow { color: var(--delta-slow); font-weight: 700; }
+    #results-table tr.more-row {
+      cursor: default;
+      background: var(--pico-card-sectioning-background-color);
+    }
+    #results-table tr.more-row td {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--pico-muted-color);
     }
     /* Row contains the search term somewhere — often only in the collapsed
        detail. A translucent overlay, so it composes with the error / hover /
@@ -413,16 +431,23 @@
     }
 
     /* ─── Call Flow Modal ─────────────────────────────── */
-    #flow-btn {
+    #flow-btn, #attrs-btn {
       display: none;
-      padding: 0.3rem 0.75rem;
+      padding: 0.3rem 0.85rem;
       font-size: 0.85rem;
       margin: 0;
       width: auto;
       white-space: nowrap;
       flex-shrink: 0;
+      background: var(--toggle-on-bg);
+      border-color: var(--toggle-on-bg);
+      color: var(--toggle-on-color);
     }
-    #flow-overlay {
+    #flow-btn:hover, #attrs-btn:hover {
+      background: var(--toggle-on-hover-bg);
+      border-color: var(--toggle-on-hover-bg);
+    }
+    .overlay {
       display: none;
       position: fixed;
       inset: 0;
@@ -431,8 +456,8 @@
       justify-content: center;
       align-items: center;
     }
-    #flow-overlay.open { display: flex; }
-    #flow-modal {
+    .overlay.open { display: flex; }
+    .modal {
       background: var(--pico-card-background-color);
       border-radius: 10px;
       padding: 1.5rem 2rem;
@@ -442,7 +467,8 @@
       position: relative;
       box-shadow: 0 8px 30px rgba(0,0,0,0.15);
     }
-    #flow-modal .close-btn {
+    #attrs-overlay .modal { width: min(900px, 92vw); }
+    .modal .close-btn {
       position: absolute;
       top: 0.5rem;
       right: 0.75rem;
@@ -455,10 +481,33 @@
       width: auto;
       line-height: 1;
     }
-    #flow-modal h3 {
+    .modal h3 {
       margin-top: 0;
       margin-bottom: 0.5rem;
       font-size: 1.1rem;
+    }
+    .modal h3 small {
+      font-size: 0.75rem;
+      font-weight: normal;
+      color: var(--pico-muted-color);
+    }
+    .attrs-table {
+      font-size: 0.82rem;
+      margin: 0;
+    }
+    .attrs-table td, .attrs-table th { padding: 0.35rem 0.5rem; }
+    .attrs-table .attr-key {
+      font-family: monospace;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    .attrs-table .attr-value {
+      font-family: monospace;
+      word-break: break-all;
+    }
+    .attrs-table .attr-block {
+      color: var(--pico-muted-color);
+      font-size: 0.75rem;
     }
     #flow-canvas {
       width: 100%;
@@ -487,17 +536,27 @@
       </div>
       <div id="upload-info"></div>
       <button id="flow-btn" title="View call flow path">Call Flow</button>
+      <button id="attrs-btn" title="Contact attributes at the end of the call">Attributes</button>
     </div>
 
-    <div id="flow-overlay">
-      <div id="flow-modal">
+    <div id="flow-overlay" class="overlay">
+      <div id="flow-modal" class="modal">
         <button class="close-btn" title="Close">&times;</button>
         <h3>Call Flow Path</h3>
         <svg id="flow-canvas"></svg>
       </div>
     </div>
 
+    <div id="attrs-overlay" class="overlay">
+      <div class="modal">
+        <button class="close-btn" title="Close">&times;</button>
+        <h3>Contact Attributes <small>final state</small></h3>
+        <div id="attrs-body"></div>
+      </div>
+    </div>
+
     <div id="filters">
+      <div id="contact-filter" class="multiselect" style="display:none"></div>
       <div id="flow-filter" class="multiselect"></div>
       <div id="block-filter" class="multiselect"></div>
       <div id="quick-filters"></div>
@@ -506,7 +565,7 @@
         <button data-mode="filter" class="active">Filter</button>
         <button data-mode="highlight">Highlight</button>
       </div>
-      <button id="expand-all-btn" style="display:none;padding:0.3rem 0.75rem;font-size:0.8rem;margin:0;width:auto;white-space:nowrap" title="Expand or collapse all rows">Expand All</button>
+      <button id="expand-all-btn" style="display:none" title="Expand or collapse all rows">Expand All</button>
       <span id="row-count"></span>
     </div>
 
@@ -520,6 +579,7 @@
             <th>Lambda</th>
             <th>Identifier</th>
             <th>Timestamp</th>
+            <th title="Time since the previous block of this contact">&Delta;</th>
           </tr>
         </thead>
         <tbody id="results-body"></tbody>
@@ -530,10 +590,10 @@
   <script>
     // ─── CONFIGURATION ──────────────────────────────────────────────
     // Bump this on every edit so the on-page badge reflects the last change, not page-load time.
-    const BUILD_VERSION = '2026-09-20 19:02';
+    const BUILD_VERSION = '2026-09-20 19:57';
     document.getElementById('build-badge').textContent = 'v' + BUILD_VERSION;
     const QUICK_FILTERS = ['InvokeExternalResource', 'PlayPrompt', 'SetAttributes', 'CheckAttribute', 'InvokeFlowModule'];
-    const MAX_RENDER_ROWS = 500;
+    const PAGE_SIZE = 500;
     // ─────────────────────────────────────────────────────────────────
 
     // ─── STATE ───────────────────────────────────────────────────────
@@ -545,13 +605,14 @@
     const fileInput = document.getElementById('file-input');
     const uploadInfo = document.getElementById('upload-info');
     const filtersEl = document.getElementById('filters');
+    const contactFilterEl = document.getElementById('contact-filter');
     const flowFilterEl = document.getElementById('flow-filter');
     const blockFilterEl = document.getElementById('block-filter');
     const quickFiltersEl = document.getElementById('quick-filters');
     const rowCount = document.getElementById('row-count');
     const tableWrapper = document.getElementById('results-table-wrapper');
     const tbody = document.getElementById('results-body');
-    const colCount = 6;
+    const colCount = 7;
     const searchInput = document.getElementById('search-input');
     const expandAllBtn = document.getElementById('expand-all-btn');
     const searchModeEl = document.getElementById('search-mode');
@@ -598,18 +659,27 @@
           parsed.sort((a, b) => (a.Timestamp || '').localeCompare(b.Timestamp || ''));
 
           rawData = parsed;
-          const contactId = rawData[0].ContactId || 'Unknown';
+          annotateRows();
+
+          const contacts = [...new Set(rawData.map(r => r.ContactId || 'Unknown'))];
           uploadInfo.innerHTML =
-            `<strong>Loaded:</strong> ${file.name} &mdash; ${rawData.length} rows<br>` +
-            `<strong>ContactId:</strong> <span class="contact-id">${contactId}</span>`;
+            `<strong>Loaded:</strong> ${esc(file.name)} &mdash; ${rawData.length} rows &mdash; ${formatDuration(callDuration())}<br>` +
+            (contacts.length > 1
+              ? `<strong>${contacts.length} ContactIds</strong> in this file &mdash; showing ` +
+                `<span class="contact-id">${esc(contacts[0])}</span> (change with the Contacts filter)`
+              : `<strong>ContactId:</strong> <span class="contact-id">${esc(contacts[0])}</span>`);
           uploadInfo.style.display = 'block';
 
           populateFilters();
+          // A file spanning several contacts interleaves unrelated calls, so
+          // start on the first one rather than showing a mixed timeline.
+          if (contacts.length > 1) contactFilter.selectOnly(contacts[0]);
           applyFilters();
           filtersEl.style.display = 'flex';
           rowCount.style.display = 'inline';
           tableWrapper.style.display = 'block';
           document.getElementById('flow-btn').style.display = 'inline-block';
+          document.getElementById('attrs-btn').style.display = 'inline-block';
           expandAllBtn.style.display = 'inline-block';
           allExpanded = false;
           expandAllBtn.textContent = 'Expand All';
@@ -619,6 +689,39 @@
           uploadInfo.style.display = 'block';
         }
       });
+    }
+
+    // ─── DERIVED ROW DATA ────────────────────────────────────────────
+    // Computed once per upload: the row's position in the full log, the gap
+    // since the previous block of the same contact, and a lowercased blob for
+    // searching (so search doesn't re-serialize every row on every keystroke).
+    function annotateRows() {
+      const lastSeen = new Map(); // ContactId -> previous row timestamp (ms)
+      rawData.forEach((row, i) => {
+        row._idx = i + 1;
+        row._searchBlob = JSON.stringify(row._raw).toLowerCase();
+        const cid = row.ContactId || 'Unknown';
+        const t = Date.parse(row.Timestamp);
+        row._ms = Number.isNaN(t) ? null : t;
+        const prev = lastSeen.get(cid);
+        row._deltaMs = (row._ms != null && prev != null) ? row._ms - prev : null;
+        if (row._ms != null) lastSeen.set(cid, row._ms);
+      });
+    }
+
+    // Wall-clock span of the rows currently in scope of the contact filter.
+    function callDuration(rows = rawData) {
+      const stamps = rows.map(r => r._ms).filter(ms => ms != null);
+      return stamps.length > 1 ? Math.max(...stamps) - Math.min(...stamps) : 0;
+    }
+
+    function formatDuration(ms) {
+      if (!ms) return '0s';
+      if (ms < 1000) return ms + 'ms';
+      const s = ms / 1000;
+      if (s < 60) return s.toFixed(1) + 's';
+      const m = Math.floor(s / 60);
+      return `${m}m ${Math.round(s - m * 60)}s`;
     }
 
     // ─── MULTI-SELECT FILTER COMPONENT ───────────────────────────────
@@ -762,6 +865,10 @@
     function closeAllMultiSelects() { multiSelects.forEach(ms => ms.close()); }
     document.addEventListener('click', closeAllMultiSelects);
 
+    const contactFilter = createMultiSelect({
+      mount: contactFilterEl, label: 'Contacts',
+      onChange: applyFilters
+    });
     const flowFilter = createMultiSelect({
       mount: flowFilterEl, label: 'Flows',
       onChange: applyFilters
@@ -786,6 +893,10 @@
 
     function populateFilters() {
       const blockValues = countBy('ContactFlowModuleType');
+      const contacts = countBy('ContactId');
+      contactFilter.setValues(contacts);
+      // Only worth showing when the export actually spans several calls.
+      contactFilterEl.style.display = contacts.length > 1 ? 'block' : 'none';
       flowFilter.setValues(countBy('ContactFlowName'));
       blockFilter.setValues(blockValues);
       const blocks = blockValues.map(b => b.value);
@@ -868,26 +979,44 @@
     function rowMatchesSearch(row) {
       if (!activeSearch) return false;
       if (row._isGroup) return row.rows.some(rowMatchesSearch);
-      return JSON.stringify(row._raw).toLowerCase().includes(activeSearch);
+      return row._searchBlob.includes(activeSearch);
     }
 
-    function applyFilters() {
-      let data = rawData;
-      data = data.filter(r => flowFilter.isSelected(r.ContactFlowName)
+    // Rows surviving the current filters, kept so "Show more" can extend the
+    // rendered window without redoing the work.
+    let filteredRows = [];
+    let renderLimit = PAGE_SIZE;
+
+    function applyFilters(resetPaging = true) {
+      if (resetPaging) renderLimit = PAGE_SIZE;
+
+      let data = rawData.filter(r =>
+        contactFilter.isSelected(r.ContactId || 'Unknown')
+        && flowFilter.isSelected(r.ContactFlowName)
         && blockFilter.isSelected(r.ContactFlowModuleType));
+
       let matchCount = 0;
       if (activeSearch) {
         matchCount = data.filter(rowMatchesSearch).length;
         if (searchMode === 'filter') data = data.filter(rowMatchesSearch);
       }
+      filteredRows = data;
 
-      const total = rawData.length;
-      const shown = Math.min(data.length, MAX_RENDER_ROWS);
-      rowCount.textContent = `${shown} of ${total}` +
-        (data.length > MAX_RENDER_ROWS ? ` (capped ${MAX_RENDER_ROWS})` : '') +
-        (activeSearch ? ` · ${matchCount ? matchCount + ' matches' : 'no matches'}` : '');
+      const inScope = rawData.filter(r => contactFilter.isSelected(r.ContactId || 'Unknown'));
+      const errors = data.filter(hasError).length;
+      const shown = Math.min(data.length, renderLimit);
+      rowCount.textContent =
+        `${shown} of ${inScope.length}` +
+        (activeSearch ? ` · ${matchCount ? matchCount + ' matches' : 'no matches'}` : '') +
+        (errors ? ` · ${errors} error${errors > 1 ? 's' : ''}` : '') +
+        ` · ${formatDuration(callDuration(inScope))}`;
 
-      renderTable(groupRows(data.slice(0, MAX_RENDER_ROWS)));
+      renderTable(groupRows(data.slice(0, renderLimit)), data.length);
+    }
+
+    function showMore() {
+      renderLimit += PAGE_SIZE;
+      applyFilters(false);
     }
 
     function groupRows(data) {
@@ -906,7 +1035,7 @@
             group.push(data[i]);
           }
           if (group.length > 1) {
-            grouped.push({ _isGroup: true, rows: group, ContactFlowName: row.ContactFlowName, Identifier: row.Identifier, ContactFlowModuleType: 'SetAttributes', Timestamp: row.Timestamp, ContactFlowId: row.ContactFlowId });
+            grouped.push({ _isGroup: true, rows: group, _idx: row._idx, ContactFlowName: row.ContactFlowName, Identifier: row.Identifier, ContactFlowModuleType: 'SetAttributes', Timestamp: row.Timestamp, ContactFlowId: row.ContactFlowId });
           } else {
             grouped.push(row);
           }
@@ -918,9 +1047,9 @@
       return grouped;
     }
 
-    function renderTable(data) {
+    function renderTable(data, totalFiltered) {
       tbody.innerHTML = '';
-      data.forEach((row, i) => {
+      data.forEach(row => {
         const tr = document.createElement('tr');
         const isGroup = row._isGroup;
         const isError = !isGroup && hasError(row);
@@ -940,22 +1069,46 @@
         if (isCheck && row.Results != null) badges += ` <span class="check-badge check-${row.Results}">${esc(row.Results)}</span>`;
 
         const lambdaName = isLambda ? extractLambdaName(row) : '';
-        const identifier = isGroup
-          ? friendlyIdentifier(row.Identifier || '')
-          : friendlyIdentifier(row.Identifier || '');
+        const identifier = friendlyIdentifier(row.Identifier || '');
+        // A group spans several blocks, so its gap is the wait before the first.
+        const delta = isGroup ? row.rows[0]._deltaMs : row._deltaMs;
 
         tr.innerHTML =
-          `<td>${i + 1}</td>` +
+          `<td>${row._idx}</td>` +
           `<td>${esc(row.ContactFlowName || '')}</td>` +
           `<td class="block-type-cell">${blockTypeDisplay}${badges}</td>` +
           `<td>${esc(lambdaName)}</td>` +
           `<td>${esc(identifier)}</td>` +
-          `<td>${formatTime(row.Timestamp)}</td>`;
+          `<td>${formatTime(row.Timestamp)}</td>` +
+          `<td class="delta-cell${deltaClass(delta)}">${delta == null ? '' : formatDelta(delta)}</td>`;
 
         tr.addEventListener('click', () => toggleDetail(row, tr));
         tbody.appendChild(tr);
       });
+
+      const rendered = data.reduce((n, r) => n + (r._isGroup ? r.rows.length : 1), 0);
+      if (totalFiltered > rendered) {
+        const tr = document.createElement('tr');
+        tr.className = 'more-row';
+        tr.innerHTML = `<td colspan="${colCount}">Showing ${rendered} of ${totalFiltered} rows — ` +
+          `<a href="#" class="show-more">show ${Math.min(PAGE_SIZE, totalFiltered - rendered)} more</a></td>`;
+        tr.querySelector('.show-more').addEventListener('click', e => { e.preventDefault(); showMore(); });
+        tbody.appendChild(tr);
+      }
       highlightIn(tbody);
+    }
+
+    // Slow gaps are the reason this column exists, so make them findable.
+    function deltaClass(ms) {
+      if (ms == null) return '';
+      if (ms >= 3000) return ' delta-slow';
+      if (ms >= 1000) return ' delta-warn';
+      return '';
+    }
+
+    function formatDelta(ms) {
+      if (ms < 1000) return '+' + ms + 'ms';
+      return '+' + (ms / 1000).toFixed(ms < 10000 ? 2 : 1) + 's';
     }
 
     // Wrap every occurrence of the current search term in <mark>, in place.
@@ -1135,6 +1288,63 @@
       return `<tr><td>${esc(label)}</td><td>${esc(value || '')}</td></tr>`;
     }
 
+    // ─── CONTACT ATTRIBUTES ─────────────────────────────────────────
+    // Replays every SetAttributes block in order, so each key ends up with its
+    // final value plus the flow/block that last wrote it and how often it was
+    // rewritten during the call.
+    function buildAttributeState(rows) {
+      const state = new Map();
+      for (const row of rows) {
+        if (row.ContactFlowModuleType !== 'SetAttributes') continue;
+        const p = row.Parameters || {};
+        if (!p.Key) continue;
+        const prev = state.get(p.Key);
+        state.set(p.Key, {
+          key: p.Key,
+          value: p.Value,
+          flow: row.ContactFlowName,
+          identifier: row.Identifier,
+          timestamp: row.Timestamp,
+          writes: prev ? prev.writes + 1 : 1,
+          history: prev ? [...prev.history, prev] : []
+        });
+      }
+      return [...state.values()].sort((a, b) => a.key.localeCompare(b.key));
+    }
+
+    const attrsBtn = document.getElementById('attrs-btn');
+    const attrsOverlay = document.getElementById('attrs-overlay');
+    const attrsBody = document.getElementById('attrs-body');
+
+    attrsBtn.addEventListener('click', () => {
+      const inScope = rawData.filter(r => contactFilter.isSelected(r.ContactId || 'Unknown'));
+      const attrs = buildAttributeState(inScope);
+      if (!attrs.length) {
+        attrsBody.innerHTML = '<p class="ms-empty">No SetAttributes blocks in this call.</p>';
+      } else {
+        let html = '<table class="attrs-table"><thead><tr><th>Key</th><th>Final value</th>' +
+          '<th>Set by</th><th>At</th><th title="Number of times this key was written">Writes</th></tr></thead><tbody>';
+        for (const a of attrs) {
+          const overwritten = a.writes > 1
+            ? ` <span class="group-badge" title="${esc(a.history.map(h => h.value).join(' → '))}">${a.writes}x</span>`
+            : '';
+          html += `<tr><td class="attr-key">${esc(a.key)}</td>` +
+            `<td class="attr-value">${esc(a.value == null ? '' : String(a.value))}</td>` +
+            `<td>${esc(a.flow || '')} <span class="attr-block">${esc(friendlyIdentifier(a.identifier || ''))}</span></td>` +
+            `<td>${formatTime(a.timestamp)}</td>` +
+            `<td>${a.writes}${overwritten}</td></tr>`;
+        }
+        attrsBody.innerHTML = html + '</tbody></table>';
+      }
+      attrsOverlay.classList.add('open');
+    });
+    attrsOverlay.addEventListener('click', e => {
+      if (e.target === attrsOverlay) attrsOverlay.classList.remove('open');
+    });
+    attrsOverlay.querySelector('.close-btn').addEventListener('click', () => {
+      attrsOverlay.classList.remove('open');
+    });
+
     // ─── CALL FLOW DIAGRAM (SVG) ────────────────────────────────────
     const flowBtn = document.getElementById('flow-btn');
     const flowOverlay = document.getElementById('flow-overlay');
@@ -1153,7 +1363,7 @@
     });
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
-      flowOverlay.classList.remove('open');
+      document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open'));
       closeAllMultiSelects();
     });
 
