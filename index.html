@@ -14,6 +14,7 @@
       --lambda-border: #3498db;
       --highlight-bg: #fffde7;
       --search-hit-bg: #ffe066;
+      --search-row-tint: rgba(255, 224, 102, 0.3);
       --search-hit-color: #3d2c00;
     }
 
@@ -267,6 +268,12 @@
     }
     #results-table tbody tr.lambda-row {
       border-left: 3px solid var(--lambda-border);
+    }
+    /* Row contains the search term somewhere — often only in the collapsed
+       detail. A translucent overlay, so it composes with the error / hover /
+       selected background colors instead of replacing them. */
+    #results-table tbody tr.match-row > td {
+      background-image: linear-gradient(var(--search-row-tint), var(--search-row-tint));
     }
     .error-badge {
       display: inline-block;
@@ -523,7 +530,7 @@
   <script>
     // ─── CONFIGURATION ──────────────────────────────────────────────
     // Bump this on every edit so the on-page badge reflects the last change, not page-load time.
-    const BUILD_VERSION = '2026-09-20 17:12';
+    const BUILD_VERSION = '2026-09-20 19:02';
     document.getElementById('build-badge').textContent = 'v' + BUILD_VERSION;
     const QUICK_FILTERS = ['InvokeExternalResource', 'PlayPrompt', 'SetAttributes', 'CheckAttribute', 'InvokeFlowModule'];
     const MAX_RENDER_ROWS = 500;
@@ -855,15 +862,23 @@
     });
 
     // ─── APPLY FILTERS & RENDER ──────────────────────────────────────
+    // Matches against the whole raw record, so a hit counts even when the
+    // value only appears in fields that are hidden until the row is expanded.
+    // A grouped row matches when any of its members does.
+    function rowMatchesSearch(row) {
+      if (!activeSearch) return false;
+      if (row._isGroup) return row.rows.some(rowMatchesSearch);
+      return JSON.stringify(row._raw).toLowerCase().includes(activeSearch);
+    }
+
     function applyFilters() {
       let data = rawData;
       data = data.filter(r => flowFilter.isSelected(r.ContactFlowName)
         && blockFilter.isSelected(r.ContactFlowModuleType));
       let matchCount = 0;
       if (activeSearch) {
-        const matches = r => JSON.stringify(r._raw).toLowerCase().includes(activeSearch);
-        matchCount = data.filter(matches).length;
-        if (searchMode === 'filter') data = data.filter(matches);
+        matchCount = data.filter(rowMatchesSearch).length;
+        if (searchMode === 'filter') data = data.filter(rowMatchesSearch);
       }
 
       const total = rawData.length;
@@ -911,6 +926,7 @@
         const isError = !isGroup && hasError(row);
         const isLambda = !isGroup && row.ContactFlowModuleType === 'InvokeExternalResource';
 
+        if (rowMatchesSearch(row)) tr.classList.add('match-row');
         if (isError) tr.classList.add('error-row');
         if (isLambda) tr.classList.add('lambda-row');
         if (isGroup) tr.classList.add('group-row');
